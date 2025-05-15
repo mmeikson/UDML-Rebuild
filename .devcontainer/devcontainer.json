@@ -1,0 +1,31 @@
+{
+  "name": "UDML Development",
+  "dockerFile": "Dockerfile",
+  "forwardPorts": [3000, 3001, 8000],
+  "settings": {
+    "terminal.integrated.defaultProfile.linux": "bash",
+    "terminal.integrated.profiles.linux": {
+      "bash": {
+        "path": "/bin/bash",
+        "args": ["-l"]
+      }
+    },
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.codeActionsOnSave": {
+      "source.fixAll.eslint": true
+    }
+  },
+  "extensions": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "figma.figma-vscode-extension",
+    "orta.vscode-jest",
+    "mikestead.dotenv",
+    "eamodio.gitlens",
+    "editorconfig.editorconfig",
+    "streetsidesoftware.code-spell-checker"
+  ],
+  "remoteUser": "node",
+  "postCreateCommand": "npm install"
+} 

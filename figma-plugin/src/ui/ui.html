@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UDML - User Design Markup Language</title>
+  <style>
+    :root {
+      --color-bg: #fff;
+      --color-text: #333;
+      --color-primary: #18A0FB;
+      --color-primary-hover: #0D8CE0;
+      --color-status: #666;
+      --color-error: #D92B2B;
+      --color-frame-bg: #f5f5f7;
+      --color-success: #4CAF50;
+      --color-server: #9C27B0;
+      --color-server-hover: #7B1FA2;
+      --color-styles: #FF9800;
+      --color-variables: #009688;
+      --color-components: #E91E63;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-bg: #18181A;
+        --color-text: #F5F5F7;
+        --color-primary: #4BA3FA;
+        --color-primary-hover: #2176C7;
+        --color-status: #A0A0A0;
+        --color-error: #FF5252;
+        --color-frame-bg: #252527;
+        --color-success: #81C784;
+        --color-server: #CE93D8;
+        --color-server-hover: #AB47BC;
+        --color-styles: #FFB74D;
+        --color-variables: #4DB6AC;
+        --color-components: #F48FB1;
+      }
+    }
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    h2 {
+      margin: 20px 0 10px;
+      font-size: 16px;
+      font-weight: 500;
+    }
+    .status {
+      color: var(--color-status);
+      margin: 10px 0;
+      font-size: 13px;
+    }
+    .frame-info {
+      background-color: var(--color-frame-bg);
+      padding: 10px;
+      border-radius: 6px;
+      margin: 10px 0;
+    }
+    .frame-info p {
+      margin: 5px 0;
+    }
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      margin: 20px 0;
+    }
+    button {
+      background-color: var(--color-primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background-color: var(--color-primary-hover);
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    button.secondary {
+      background-color: transparent;
+      color: var(--color-primary);
+      border: 1px solid var(--color-primary);
+    }
+    button.secondary:hover {
+      background-color: rgba(24, 145, 251, 0.1);
+    }
+    button.server {
+      background-color: var(--color-server);
+    }
+    button.server:hover {
+      background-color: var(--color-server-hover);
+    }
+    .error {
+      color: var(--color-error);
+      padding: 10px;
+      border-radius: 6px;
+      background-color: rgba(217, 43, 43, 0.1);
+      margin: 10px 0;
+    }
+    .success {
+      color: var(--color-success);
+      padding: 10px;
+      border-radius: 6px;
+      background-color: rgba(76, 175, 80, 0.1);
+      margin: 10px 0;
+    }
+    .extraction-result {
+      margin-top: 20px;
+    }
+    pre {
+      background-color: var(--color-frame-bg);
+      padding: 15px;
+      border-radius: 6px;
+      overflow: auto;
+      max-height: 200px;
+      font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+      font-size: 12px;
+    }
+    .extraction-summary {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .summary-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 4px;
+      background-color: var(--color-frame-bg);
+    }
+    .summary-count {
+      font-weight: bold;
+      background-color: rgba(24, 145, 251, 0.2);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .styles-count {
+      background-color: rgba(255, 152, 0, 0.2);
+      color: var(--color-styles);
+    }
+    .variables-count {
+      background-color: rgba(0, 150, 136, 0.2);
+      color: var(--color-variables);
+    }
+    .components-count {
+      background-color: rgba(233, 30, 99, 0.2);
+      color: var(--color-components);
+    }
+  </style>
+</head>
+<body>
+  <h1>UDML - Frame Extraction</h1>
+  <div class="status" id="status">Select a frame to extract...</div>
+  
+  <div id="selectionInfo" class="frame-info" style="display: none;">
+    <h2>Selected Frame</h2>
+    <p><strong>Name:</strong> <span id="frameName">-</span></p>
+    <p><strong>Type:</strong> <span id="frameType">-</span></p>
+    <p><strong>Size:</strong> <span id="frameSize">-</span></p>
+  </div>
+  
+  <div id="error" class="error" style="display: none;"></div>
+  <div id="success" class="success" style="display: none;"></div>
+  
+  <div class="btn-group">
+    <button id="extractBtn" disabled>Extract Frame</button>
+    <button id="downloadBtn" class="secondary" style="display: none;">Download JSON</button>
+    <button id="sendToServerBtn" class="server" style="display: none;">Send to Server</button>
+    <button id="closeBtn" class="secondary">Close</button>
+  </div>
+  
+  <div id="extractionResult" class="extraction-result" style="display: none;">
+    <h2>Extraction Results</h2>
+    
+    <div class="extraction-summary">
+      <div class="summary-item">
+        <span>Total Nodes:</span>
+        <span id="nodeCount" class="summary-count">0</span>
+      </div>
+      <div class="summary-item">
+        <span>Styles Found:</span>
+        <span id="stylesCount" class="summary-count styles-count">0</span>
+      </div>
+      <div class="summary-item">
+        <span>Variables Found:</span>
+        <span id="variablesCount" class="summary-count variables-count">0</span>
+      </div>
+      <div class="summary-item">
+        <span>Components Found:</span>
+        <span id="componentsCount" class="summary-count components-count">0</span>
+      </div>
+    </div>
+    
+    <pre id="jsonPreview"></pre>
+  </div>
+  
+  <script>
+    document.getElementById('extractBtn').addEventListener('click', () => {
+      document.getElementById('status').textContent = 'Extracting frame data...';
+      document.getElementById('error').style.display = 'none';
+      document.getElementById('success').style.display = 'none';
+      parent.postMessage({ pluginMessage: { type: 'extract-frame' } }, '*');
+    });
+    
+    document.getElementById('closeBtn').addEventListener('click', () => {
+      parent.postMessage({ pluginMessage: { type: 'close' } }, '*');
+    });
+    
+    document.getElementById('downloadBtn').addEventListener('click', () => {
+      const jsonData = document.getElementById('jsonPreview').textContent;
+      const blob = new Blob([jsonData], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${document.getElementById('frameName').textContent.replace(/\s+/g, '-')}-data.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+    
+    document.getElementById('sendToServerBtn').addEventListener('click', () => {
+      const jsonData = document.getElementById('jsonPreview').textContent;
+      
+      // Show sending status
+      document.getElementById('status').textContent = 'Sending to server...';
+      
+      // Make API call to server
+      fetch('http://localhost:4000/api/process/convert', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ figmaData: JSON.parse(jsonData) })
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`Server responded with status: ${response.status}`);
+        }
+        return response.text();
+      })
+      .then(data => {
+        document.getElementById('status').textContent = 'Successfully sent to server!';
+        document.getElementById('success').textContent = 'Data sent to server and processed successfully.';
+        document.getElementById('success').style.display = 'block';
+      })
+      .catch(error => {
+        document.getElementById('status').textContent = 'Failed to send to server.';
+        document.getElementById('error').textContent = `Error: ${error.message}`;
+        document.getElementById('error').style.display = 'block';
+      });
+    });
+    
+    // Handle incoming messages from the plugin
+    window.onmessage = (event) => {
+      const msg = event.data.pluginMessage;
+      
+      if (msg.type === 'plugin-ready') {
+        document.getElementById('status').textContent = 'Plugin ready. Select a frame to extract.';
+      }
+      else if (msg.type === 'selection-update') {
+        const selectionInfo = document.getElementById('selectionInfo');
+        const extractBtn = document.getElementById('extractBtn');
+        
+        if (msg.selection) {
+          // Update UI with selection details
+          document.getElementById('frameName').textContent = msg.selection.name;
+          document.getElementById('frameType').textContent = msg.selection.type;
+          document.getElementById('frameSize').textContent = `${Math.round(msg.selection.width)}px × ${Math.round(msg.selection.height)}px`;
+          
+          selectionInfo.style.display = 'block';
+          extractBtn.disabled = false;
+          document.getElementById('status').textContent = 'Frame selected. Click "Extract Frame" to proceed.';
+        } else {
+          selectionInfo.style.display = 'none';
+          extractBtn.disabled = true;
+          document.getElementById('status').textContent = 'Select a frame, component, or instance to extract.';
+        }
+      }
+      else if (msg.type === 'extraction-complete') {
+        document.getElementById('status').textContent = 'Extraction complete!';
+        document.getElementById('success').textContent = `Successfully extracted "${msg.data.name}"`;
+        document.getElementById('success').style.display = 'block';
+        
+        // Parse the JSON to count nodes, styles, and variables
+        try {
+          const parsedData = JSON.parse(msg.data.json);
+          
+          // Count nodes recursively
+          function countNodes(node) {
+            let count = 1; // Count this node
+            if (node.children && Array.isArray(node.children)) {
+              for (const child of node.children) {
+                count += countNodes(child);
+              }
+            }
+            return count;
+          }
+          
+          // Count styles recursively
+          function countStyles(node) {
+            let count = node.styles ? Object.keys(node.styles).length : 0;
+            if (node.children && Array.isArray(node.children)) {
+              for (const child of node.children) {
+                count += countStyles(child);
+              }
+            }
+            return count;
+          }
+          
+          // Count variables recursively
+          function countVariables(node) {
+            let count = 0;
+            if (node.variables && node.variables.boundVariables) {
+              count = Object.keys(node.variables.boundVariables).length;
+            }
+            if (node.children && Array.isArray(node.children)) {
+              for (const child of node.children) {
+                count += countVariables(child);
+              }
+            }
+            return count;
+          }
+          
+          // Count components recursively
+          function countComponents(node) {
+            let count = 0;
+            if (node.components) {
+              // Count different component types
+              if (node.components.mainComponent) count++;
+              if (node.components.componentDefinition) count++;
+              if (node.components.componentSetDefinition) count++;
+            }
+            if (node.children && Array.isArray(node.children)) {
+              for (const child of node.children) {
+                count += countComponents(child);
+              }
+            }
+            return count;
+          }
+          
+          const nodeCount = countNodes(parsedData);
+          const stylesCount = countStyles(parsedData);
+          const variablesCount = countVariables(parsedData);
+          const componentsCount = countComponents(parsedData);
+          
+          document.getElementById('nodeCount').textContent = nodeCount;
+          document.getElementById('stylesCount').textContent = stylesCount;
+          document.getElementById('variablesCount').textContent = variablesCount;
+          document.getElementById('componentsCount').textContent = componentsCount;
+        } catch (e) {
+          console.error('Error parsing or counting JSON:', e);
+        }
+        
+        // Display the JSON
+        document.getElementById('jsonPreview').textContent = msg.data.json;
+        document.getElementById('extractionResult').style.display = 'block';
+        
+        // Show the download button
+        document.getElementById('downloadBtn').style.display = 'inline-block';
+        document.getElementById('sendToServerBtn').style.display = 'inline-block';
+      }
+      else if (msg.type === 'error') {
+        document.getElementById('status').textContent = 'Error occurred';
+        document.getElementById('error').textContent = msg.message;
+        document.getElementById('error').style.display = 'block';
+      }
+    };
+  </script>
+</body>
+</html> 

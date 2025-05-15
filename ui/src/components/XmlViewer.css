@@ -1,0 +1,19 @@
+.xml-viewer {
+  width: 100%;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Override some syntax highlighter styles */
+.xml-viewer pre {
+  margin: 0 !important;
+  padding: 12px !important;
+  border-radius: 4px !important;
+}
+
+.xml-viewer code {
+  font-family: 'Fira Code', Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+} 

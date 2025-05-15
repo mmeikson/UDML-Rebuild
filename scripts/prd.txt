@@ -1,0 +1,27 @@
+Objective:
+The goal is to create a system that converts raw Figma json into a concise and semantic XML document that can be easily interpreted by AI coding assistants.
+
+The system will consist of three parts:
+
+1. A Figma plugin that allows a user to select a target frame, and extract raw JSON as well as a screenshot.
+2. A server side application that processes the JSON and converts it to XML as described below.
+3. A simple UI that displays the screenshot alongside the XML.
+
+Requirements:
+
+1. Extract raw Figma JSON via a Figma plugin. The user will select a frame in Figma. The system will extract the entire JSON node hierarchy of that frame, all referenced styles, and all referenced variables both in the frame and the styles. It will also extract the full node hierarchies of all referenced components. Consider the full scope of requirements below to make sure we extract all necessary JSON.
+2. Export a PNG screenshot of the selected frame.
+3. Send the JSON and PNG to the server.
+4. Clean raw JSON. Remove default or unnecessary values across all Figma nodes. I will provide a set of default values to exclude. 
+5. Analyze components to detect user-defined properties and variants.
+6. Diff instances against components to detect slot. For all INSTANCE nodes that reference components, run a diff against the main component to identify values that should be treated as slots, such as text field data.
+7. Detect repeated objects with identical structures (but not necessarily values) that are not treated as components and convert them to components with slots.
+8. For all components (both user-defined and detected), identify the local instances and store the values in data arrays. For example, a grid of cards similar to an Airbnb results page should be represented as a single "card" component, and there should be a "cards" data set containing the unique values in each card.
+9. Detect images and export them as PNG. Insert the filename into the relevant node so it can be referenced later.
+10. Detect vector graphics such as logos and icons and export them as SVG. I will provide vector detection logic. For example, any nodes containing only vector nodes should be treated as a single SVG. Insert the filename into the relevant node so it can be referenced later.
+11. Replace all values stored as variables with references to those variables. For example, if the color #000000 is stored as variable "white", all references to #000000 should be replaced with @var("white").
+12. Replace all references to styles with the style name.
+13. For all nodes that have styles applied, strip local values that are covered by styles. For example, if a node has a text style applied, strip all local text properties covered by the style.
+14. Apply transformations. I will provide a set of transformations to apply, including auto-layout detection, shortening certain property values, etc.
+15. Convert the JSON to clean XML with <variables>, <styles>, <components>, <data> and <screen> sections.
+16. Display the XML in a UI alongside the screenshot and make the XML available for download. 

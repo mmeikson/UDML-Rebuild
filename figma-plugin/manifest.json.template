@@ -1,0 +1,12 @@
+{
+  "name": "UDML - Universal Design Markup Language",
+  "id": "universal-design",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "editorType": ["figma"],
+  "permissions": ["currentuser", "activeusers"],
+  "relaunchButtons": [
+    {"command": "open", "name": "Open UDML", "multipleSelection": false}
+  ]
+} 

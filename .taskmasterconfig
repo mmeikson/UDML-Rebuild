@@ -1,0 +1,8 @@
+{
+  "projectName": "Taskmaster Test",
+  "taskDirectory": "./tasks",
+  "priorityLevels": ["low", "medium", "high", "critical"],
+  "defaultPriority": "medium",
+  "defaultSubtasks": 5,
+  "enableMCP": true
+} 

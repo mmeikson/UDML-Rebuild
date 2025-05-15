@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Run linting and type checking
+npx lint-staged
+
+# Run dependency validation to ensure no invalid dependencies are introduced
+node scripts/analyze-deps.js --validate 

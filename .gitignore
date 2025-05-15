@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Figma plugin build artifacts
+figma-plugin/manifest.json
+
+# IDE and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Cache
+.turbo
+
+# Logs
+logs
+*.log
+dev-debug.log
+
+# Editor directories and files
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Task files
+tasks.json
+tasks/
+
+# Added by Claude Task Master
+# Dependency directories
+.idea
+.vscode
