@@ -19,6 +19,9 @@
       --color-styles: #FF9800;
       --color-variables: #009688;
       --color-components: #E91E63;
+      --color-warning: #FFC107;
+      --color-valid: #4CAF50;
+      --color-invalid: #D92B2B;
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -35,6 +38,9 @@
         --color-styles: #FFB74D;
         --color-variables: #4DB6AC;
         --color-components: #F48FB1;
+        --color-warning: #FFD54F;
+        --color-valid: #81C784;
+        --color-invalid: #FF5252;
       }
     }
     body {
@@ -120,6 +126,13 @@
       background-color: rgba(76, 175, 80, 0.1);
       margin: 10px 0;
     }
+    .warning {
+      color: var(--color-warning);
+      padding: 10px;
+      border-radius: 6px;
+      background-color: rgba(255, 193, 7, 0.1);
+      margin: 10px 0;
+    }
     .extraction-result {
       margin-top: 20px;
     }
@@ -164,6 +177,135 @@
       background-color: rgba(233, 30, 99, 0.2);
       color: var(--color-components);
     }
+    .component-sets-count {
+      background-color: rgba(156, 39, 176, 0.2);
+      color: var(--color-server);
+    }
+    .validation-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 500;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+    .validation-valid {
+      background-color: rgba(76, 175, 80, 0.1);
+      color: var(--color-valid);
+    }
+    .validation-warning {
+      background-color: rgba(255, 193, 7, 0.1);
+      color: var(--color-warning);
+    }
+    .validation-invalid {
+      background-color: rgba(217, 43, 43, 0.1);
+      color: var(--color-invalid);
+    }
+    .validation-issues {
+      margin-top: 15px;
+      border-top: 1px solid rgba(128, 128, 128, 0.1);
+      padding-top: 10px;
+    }
+    .issue-item {
+      padding: 8px;
+      margin-bottom: 8px;
+      border-radius: 4px;
+      border-left: 3px solid transparent;
+    }
+    .issue-error {
+      background-color: rgba(217, 43, 43, 0.05);
+      border-left-color: var(--color-error);
+    }
+    .issue-warning {
+      background-color: rgba(255, 193, 7, 0.05);
+      border-left-color: var(--color-warning);
+    }
+    .issue-type {
+      font-weight: 500;
+      text-transform: uppercase;
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+    .issue-message {
+      margin-bottom: 6px;
+    }
+    .issue-location {
+      font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+      font-size: 11px;
+      background-color: rgba(128, 128, 128, 0.1);
+      padding: 2px 4px;
+      border-radius: 3px;
+    }
+    
+    /* Component Set Info */
+    .component-set-section {
+      margin-top: 20px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(128, 128, 128, 0.1);
+    }
+    .component-set-title {
+      font-weight: 500;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .component-set-title .count {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--color-status);
+    }
+    .component-set-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .component-set-item {
+      padding: 10px;
+      background-color: var(--color-frame-bg);
+      border-radius: 6px;
+      border-left: 3px solid var(--color-server);
+    }
+    .component-set-name {
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+    .component-set-id {
+      font-size: 11px;
+      font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+      color: var(--color-status);
+      margin-bottom: 8px;
+    }
+    .component-variant-list {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(128, 128, 128, 0.05);
+    }
+    .component-variant-title {
+      font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+    .component-variant-item {
+      font-size: 12px;
+      padding: 4px 8px;
+      margin-bottom: 4px;
+      background-color: rgba(128, 128, 128, 0.05);
+      border-radius: 4px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .component-variant-name {
+      font-weight: 500;
+    }
+    .component-variant-prop {
+      font-size: 10px;
+      background-color: rgba(233, 30, 99, 0.1);
+      color: var(--color-components);
+      padding: 1px 4px;
+      border-radius: 3px;
+      margin-left: 4px;
+    }
   </style>
 </head>
 <body>
@@ -179,6 +321,7 @@
   
   <div id="error" class="error" style="display: none;"></div>
   <div id="success" class="success" style="display: none;"></div>
+  <div id="warning" class="warning" style="display: none;"></div>
   
   <div class="btn-group">
     <button id="extractBtn" disabled>Extract Frame</button>
@@ -188,7 +331,7 @@
   </div>
   
   <div id="extractionResult" class="extraction-result" style="display: none;">
-    <h2>Extraction Results</h2>
+    <h2>Extraction Results <span id="validationStatus" class="validation-badge validation-valid">Valid</span></h2>
     
     <div class="extraction-summary">
       <div class="summary-item">
@@ -207,6 +350,24 @@
         <span>Components Found:</span>
         <span id="componentsCount" class="summary-count components-count">0</span>
       </div>
+      <div class="summary-item">
+        <span>Component Sets Found:</span>
+        <span id="componentSetsCount" class="summary-count component-sets-count">0</span>
+      </div>
+    </div>
+    
+    <div id="validationIssues" class="validation-issues" style="display: none;">
+      <h3>Validation Issues</h3>
+      <div id="issuesList"></div>
+    </div>
+    
+    <div id="componentSetSection" class="component-set-section" style="display: none;">
+      <div class="component-set-title">
+        Component Sets <span class="count" id="componentSetCount">0 found</span>
+      </div>
+      <div id="componentSetList" class="component-set-list">
+        <!-- Component sets will be dynamically inserted here -->
+      </div>
     </div>
     
     <pre id="jsonPreview"></pre>
@@ -217,6 +378,7 @@
       document.getElementById('status').textContent = 'Extracting frame data...';
       document.getElementById('error').style.display = 'none';
       document.getElementById('success').style.display = 'none';
+      document.getElementById('warning').style.display = 'none';
       parent.postMessage({ pluginMessage: { type: 'extract-frame' } }, '*');
     });
     
@@ -300,74 +462,160 @@
         document.getElementById('success').textContent = `Successfully extracted "${msg.data.name}"`;
         document.getElementById('success').style.display = 'block';
         
-        // Parse the JSON to count nodes, styles, and variables
+        // Use statistics directly from the structured data
+        if (msg.data.stats) {
+          document.getElementById('nodeCount').textContent = msg.data.stats.totalNodes || 0;
+          
+          const styles = msg.data.stats.styles || {};
+          document.getElementById('stylesCount').textContent = styles.total || 0;
+          
+          const variables = msg.data.stats.variables || {};
+          document.getElementById('variablesCount').textContent = variables.total || 0;
+          
+          const components = msg.data.stats.components || {};
+          document.getElementById('componentsCount').textContent = components.total || 0;
+          document.getElementById('componentSetsCount').textContent = components.componentSets || 0;
+        }
+        
+        // Handle validation status and issues
+        const validationStatusBadge = document.getElementById('validationStatus');
+        const validationIssuesSection = document.getElementById('validationIssues');
+        const issuesList = document.getElementById('issuesList');
+        
+        // Clear previous issues
+        issuesList.innerHTML = '';
+        
+        // Update validation status styling
+        validationStatusBadge.textContent = msg.data.validationStatus || 'Valid';
+        validationStatusBadge.className = 'validation-badge';
+        
+        if (msg.data.validationStatus === 'valid') {
+          validationStatusBadge.classList.add('validation-valid');
+          validationIssuesSection.style.display = 'none';
+        } else if (msg.data.validationStatus === 'warning') {
+          validationStatusBadge.classList.add('validation-warning');
+          document.getElementById('warning').textContent = 'Warning: Issues found during validation. See the issues list below.';
+          document.getElementById('warning').style.display = 'block';
+          displayValidationIssues();
+        } else if (msg.data.validationStatus === 'invalid') {
+          validationStatusBadge.classList.add('validation-invalid');
+          document.getElementById('error').textContent = 'Error: Data validation failed. Please review the issues below.';
+          document.getElementById('error').style.display = 'block';
+          displayValidationIssues();
+        }
+        
+        // Display component sets if available
         try {
           const parsedData = JSON.parse(msg.data.json);
-          
-          // Count nodes recursively
-          function countNodes(node) {
-            let count = 1; // Count this node
-            if (node.children && Array.isArray(node.children)) {
-              for (const child of node.children) {
-                count += countNodes(child);
+          if (parsedData.design && parsedData.design.componentSets) {
+            const componentSets = parsedData.design.componentSets;
+            const componentSetCount = Object.keys(componentSets).length;
+            
+            if (componentSetCount > 0) {
+              // Show component set section
+              const componentSetSection = document.getElementById('componentSetSection');
+              const componentSetCountElem = document.getElementById('componentSetCount');
+              const componentSetList = document.getElementById('componentSetList');
+              
+              componentSetSection.style.display = 'block';
+              componentSetCountElem.textContent = `${componentSetCount} found`;
+              componentSetList.innerHTML = ''; // Clear existing content
+              
+              // Create a component set item for each set
+              for (const setId in componentSets) {
+                const set = componentSets[setId];
+                const setItem = document.createElement('div');
+                setItem.className = 'component-set-item';
+                
+                // Set name and ID
+                const setName = document.createElement('div');
+                setName.className = 'component-set-name';
+                setName.textContent = set.name || 'Unnamed Component Set';
+                setItem.appendChild(setName);
+                
+                const setIdElem = document.createElement('div');
+                setIdElem.className = 'component-set-id';
+                setIdElem.textContent = `ID: ${setId}`;
+                setItem.appendChild(setIdElem);
+                
+                // Add variant information
+                if (set.variants && set.variants.length > 0) {
+                  const variantList = document.createElement('div');
+                  variantList.className = 'component-variant-list';
+                  
+                  const variantTitle = document.createElement('div');
+                  variantTitle.className = 'component-variant-title';
+                  variantTitle.textContent = `Variants (${set.variants.length})`;
+                  variantList.appendChild(variantTitle);
+                  
+                  // Add each variant
+                  set.variants.forEach(variant => {
+                    const variantItem = document.createElement('div');
+                    variantItem.className = 'component-variant-item';
+                    
+                    const variantName = document.createElement('span');
+                    variantName.className = 'component-variant-name';
+                    variantName.textContent = variant.name || 'Unnamed Variant';
+                    variantItem.appendChild(variantName);
+                    
+                    // Add variant properties if available
+                    if (variant.variantProperties) {
+                      const propsSpan = document.createElement('span');
+                      
+                      Object.entries(variant.variantProperties).forEach(([prop, value]) => {
+                        const propSpan = document.createElement('span');
+                        propSpan.className = 'component-variant-prop';
+                        propSpan.textContent = `${prop}=${value}`;
+                        propsSpan.appendChild(propSpan);
+                      });
+                      
+                      variantItem.appendChild(propsSpan);
+                    }
+                    
+                    variantList.appendChild(variantItem);
+                  });
+                  
+                  setItem.appendChild(variantList);
+                }
+                
+                componentSetList.appendChild(setItem);
               }
             }
-            return count;
           }
-          
-          // Count styles recursively
-          function countStyles(node) {
-            let count = node.styles ? Object.keys(node.styles).length : 0;
-            if (node.children && Array.isArray(node.children)) {
-              for (const child of node.children) {
-                count += countStyles(child);
+        } catch (error) {
+          console.error('Error parsing component sets:', error);
+        }
+        
+        // Display validation issues if present
+        function displayValidationIssues() {
+          if (msg.data.validationIssues && msg.data.validationIssues.length > 0) {
+            validationIssuesSection.style.display = 'block';
+            
+            // Create issue items
+            msg.data.validationIssues.forEach(issue => {
+              const issueItem = document.createElement('div');
+              issueItem.className = `issue-item issue-${issue.type}`;
+              
+              const issueType = document.createElement('div');
+              issueType.className = 'issue-type';
+              issueType.textContent = issue.type;
+              issueItem.appendChild(issueType);
+              
+              const issueMessage = document.createElement('div');
+              issueMessage.className = 'issue-message';
+              issueMessage.textContent = issue.message;
+              issueItem.appendChild(issueMessage);
+              
+              if (issue.location) {
+                const issueLocation = document.createElement('div');
+                issueLocation.className = 'issue-location';
+                issueLocation.textContent = `Location: ${Array.isArray(issue.location) ? issue.location.join(' → ') : issue.location}`;
+                issueItem.appendChild(issueLocation);
               }
-            }
-            return count;
+              
+              issuesList.appendChild(issueItem);
+            });
           }
-          
-          // Count variables recursively
-          function countVariables(node) {
-            let count = 0;
-            if (node.variables && node.variables.boundVariables) {
-              count = Object.keys(node.variables.boundVariables).length;
-            }
-            if (node.children && Array.isArray(node.children)) {
-              for (const child of node.children) {
-                count += countVariables(child);
-              }
-            }
-            return count;
-          }
-          
-          // Count components recursively
-          function countComponents(node) {
-            let count = 0;
-            if (node.components) {
-              // Count different component types
-              if (node.components.mainComponent) count++;
-              if (node.components.componentDefinition) count++;
-              if (node.components.componentSetDefinition) count++;
-            }
-            if (node.children && Array.isArray(node.children)) {
-              for (const child of node.children) {
-                count += countComponents(child);
-              }
-            }
-            return count;
-          }
-          
-          const nodeCount = countNodes(parsedData);
-          const stylesCount = countStyles(parsedData);
-          const variablesCount = countVariables(parsedData);
-          const componentsCount = countComponents(parsedData);
-          
-          document.getElementById('nodeCount').textContent = nodeCount;
-          document.getElementById('stylesCount').textContent = stylesCount;
-          document.getElementById('variablesCount').textContent = variablesCount;
-          document.getElementById('componentsCount').textContent = componentsCount;
-        } catch (e) {
-          console.error('Error parsing or counting JSON:', e);
         }
         
         // Display the JSON
