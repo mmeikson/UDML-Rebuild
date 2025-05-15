@@ -199,6 +199,15 @@ function extractComponentReferences(node: any): any {
           key: instance.mainComponent.key
         };
         
+        // Extract the complete node structure of the main component
+        try {
+          // Use the same extraction logic we use for the main frame
+          console.log(`🧩 Extracting complete structure of component: "${instance.mainComponent.name}"`);
+          componentData.mainComponent.structure = extractNodeData(instance.mainComponent);
+        } catch (structureError) {
+          console.warn('Error extracting main component structure:', structureError);
+        }
+        
         // Extract component properties if available
         try {
           if ('componentProperties' in instance) {
@@ -234,6 +243,14 @@ function extractComponentReferences(node: any): any {
                 key: componentSet.key,
                 isVariantSource: true
               };
+              
+              // Extract the complete component set structure
+              try {
+                console.log(`🧩 Extracting complete structure of component set: "${componentSet.name}"`);
+                componentData.componentSet.structure = extractNodeData(componentSet);
+              } catch (setStructureError) {
+                console.warn('Error extracting component set structure:', setStructureError);
+              }
               
               // Extract variant properties
               if ('variantProperties' in instance.mainComponent) {
@@ -286,6 +303,14 @@ function extractComponentReferences(node: any): any {
               key: componentSet.key,
               isVariantSource: true
             };
+            
+            // Extract the complete component set structure
+            try {
+              console.log(`🧩 Extracting complete structure of component set: "${componentSet.name}"`);
+              componentData.componentSet.structure = extractNodeData(componentSet);
+            } catch (setStructureError) {
+              console.warn('Error extracting component set structure:', setStructureError);
+            }
             
             // Get variant properties for this component
             if ('variantProperties' in component) {
@@ -351,6 +376,14 @@ function extractComponentReferences(node: any): any {
                 name: child.name,
                 key: (child as ComponentNode).key
               };
+              
+              // Extract the complete variant structure
+              try {
+                console.log(`🧩 Extracting complete structure of variant: "${child.name}"`);
+                variantInfo.structure = extractNodeData(child);
+              } catch (variantStructureError) {
+                console.warn('Error extracting variant structure:', variantStructureError);
+              }
               
               // Get variant properties if available
               if ('variantProperties' in child) {
@@ -629,6 +662,13 @@ function structureAndValidateData(extractedData: any): any {
               ...node.components.componentSet,
               variants: []
             };
+            
+            // Preserve the full component set structure if available
+            if (node.components.componentSet.structure) {
+              structuredData.design.componentSets[componentSetId].structure = 
+                node.components.componentSet.structure;
+            }
+            
             structuredData.metadata.statistics.components.componentSets++;
           }
           
@@ -674,6 +714,13 @@ function structureAndValidateData(extractedData: any): any {
               ...node.components.componentSet,
               variants: []
             };
+            
+            // Preserve the full component set structure if available
+            if (node.components.componentSet.structure) {
+              structuredData.design.componentSets[componentSetId].structure = 
+                node.components.componentSet.structure;
+            }
+            
             structuredData.metadata.statistics.components.componentSets++;
           }
           
@@ -735,6 +782,12 @@ function structureAndValidateData(extractedData: any): any {
                 key: variant.key,
                 componentSetId: componentSetId // Reference back to the parent
               };
+              
+              // Preserve the full variant structure if available
+              if (variant.structure) {
+                structuredData.design.components[variantId].structure = variant.structure;
+              }
+              
               structuredData.metadata.statistics.components.mainComponents++;
             }
             
