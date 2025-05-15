@@ -8,6 +8,10 @@ console.log('Showing UI...');
 figma.showUI(__html__, { width: 450, height: 550 });
 console.log('UI shown, waiting for messages...');
 
+// Add a recursion depth counter at the top of the file to limit component extraction depth
+let extractionDepth = 0;
+const MAX_EXTRACTION_DEPTH = 5; // Limit recursion to 5 levels deep
+
 /**
  * Extract variable information from a node
  * @param node The Figma node to extract variable information from
@@ -188,8 +192,11 @@ function extractComponentReferences(node: any): any {
   const componentData: any = {};
   
   try {
+    console.log(`[extractComponentReferences:start] Processing node type: ${node.type}, id: ${node.id}, name: ${node.name}`);
+    
     // Handle INSTANCE nodes - extract main component, properties, and overrides
     if (node.type === 'INSTANCE') {
+      console.log(`[extractComponentReferences:INSTANCE] Processing instance node: ${node.name}`);
       const instance = node as InstanceNode;
       if (instance.mainComponent) {
         console.log(`🧩 Found instance on node "${node.name}" of component: "${instance.mainComponent.name}"`);
@@ -202,40 +209,61 @@ function extractComponentReferences(node: any): any {
         // Extract the complete node structure of the main component
         try {
           // Use the same extraction logic we use for the main frame
-          console.log(`🧩 Extracting complete structure of component: "${instance.mainComponent.name}"`);
-          componentData.mainComponent.structure = extractNodeData(instance.mainComponent);
+          console.log(`[extractComponentReferences:mainComponentStructure] Extracting structure of component: "${instance.mainComponent.name}"`);
+          // IMPORTANT: Instead of extracting the full structure which causes API errors,
+          // we'll extract just the essential metadata about the component
+          componentData.mainComponent.safeStructure = {
+            id: instance.mainComponent.id,
+            name: instance.mainComponent.name,
+            type: instance.mainComponent.type,
+            key: instance.mainComponent.key,
+            // Add basic properties where available without recursion
+            description: (instance.mainComponent as ComponentNode).description || null,
+            width: 'width' in instance.mainComponent ? instance.mainComponent.width : undefined,
+            height: 'height' in instance.mainComponent ? instance.mainComponent.height : undefined
+          };
+          
+          // Don't extract full structure recursively - this is causing the API error in func147
+          console.log(`[extractComponentReferences:safeExtraction] Using safe extraction for main component to avoid API errors`);
         } catch (structureError) {
-          console.warn('Error extracting main component structure:', structureError);
+          console.warn(`[extractComponentReferences:mainComponentError] Error extracting main component structure:`, structureError);
+          // Don't rethrow to prevent loop
         }
         
-        // Extract component properties if available
+        // Handle component properties with better error handling
         try {
-          if ('componentProperties' in instance) {
+          console.log(`[extractComponentReferences:componentProperties] Checking for component properties`);
+          if ('componentProperties' in instance && instance.componentProperties) {
             const properties = instance.componentProperties;
             if (properties && Object.keys(properties).length > 0) {
               console.log(`🧩 Found ${Object.keys(properties).length} component properties on instance "${node.name}"`);
               componentData.componentProperties = {};
               
               for (const property in properties) {
-                const propDetails = properties[property];
-                componentData.componentProperties[property] = {
-                  type: propDetails.type,
-                  value: propDetails.value
-                };
+                try {
+                  const propDetails = properties[property];
+                  componentData.componentProperties[property] = {
+                    type: propDetails.type,
+                    value: propDetails.value
+                  };
+                } catch (propError) {
+                  console.warn(`[extractComponentReferences:propertyError] Error processing property ${property}:`, propError);
+                }
               }
             }
           }
         } catch (propsError) {
-          console.warn('Error extracting component properties:', propsError);
+          console.warn(`[extractComponentReferences:propertiesError] Error extracting component properties:`, propsError);
         }
         
         // Enhanced Component Set Extraction
         try {
+          console.log(`[extractComponentReferences:componentSetCheck] Checking for parent component set`);
           if (instance.mainComponent.parent) {
             // Check if parent is a component set
             if (instance.mainComponent.parent.type === 'COMPONENT_SET') {
               const componentSet = instance.mainComponent.parent as ComponentSetNode;
-              console.log(`🧩 Found component set for instance "${node.name}": "${componentSet.name}"`);
+              console.log(`[extractComponentReferences:componentSetFound] Found component set: "${componentSet.name}" for instance "${node.name}"`);
               
               componentData.componentSet = {
                 id: componentSet.id,
@@ -247,9 +275,25 @@ function extractComponentReferences(node: any): any {
               // Extract the complete component set structure
               try {
                 console.log(`🧩 Extracting complete structure of component set: "${componentSet.name}"`);
-                componentData.componentSet.structure = extractNodeData(componentSet);
+                // IMPORTANT: Instead of extracting the full structure which causes API errors,
+                // we'll extract just the essential metadata about the component set
+                componentData.componentSet.safeStructure = {
+                  id: componentSet.id,
+                  name: componentSet.name,
+                  type: componentSet.type,
+                  children: componentSet.children ? componentSet.children.map(child => ({
+                    id: child.id,
+                    name: child.name,
+                    type: child.type,
+                    // Don't extract nested structures for children to avoid recursion
+                  })) : []
+                };
+                
+                // Don't extract full structure recursively - this is causing the API error in func147
+                console.log(`[extractComponentReferences:safeExtraction] Using safe extraction for component set to avoid API errors`);
               } catch (setStructureError) {
                 console.warn('Error extracting component set structure:', setStructureError);
+                // Don't rethrow to prevent loop
               }
               
               // Extract variant properties
@@ -307,9 +351,25 @@ function extractComponentReferences(node: any): any {
             // Extract the complete component set structure
             try {
               console.log(`🧩 Extracting complete structure of component set: "${componentSet.name}"`);
-              componentData.componentSet.structure = extractNodeData(componentSet);
+              // IMPORTANT: Instead of extracting the full structure which causes API errors,
+              // we'll extract just the essential metadata about the component set
+              componentData.componentSet.safeStructure = {
+                id: componentSet.id,
+                name: componentSet.name,
+                type: componentSet.type,
+                children: componentSet.children ? componentSet.children.map(child => ({
+                  id: child.id,
+                  name: child.name,
+                  type: child.type,
+                  // Don't extract nested structures for children to avoid recursion
+                })) : []
+              };
+              
+              // Don't extract full structure recursively - this is causing the API error in func147
+              console.log(`[extractComponentReferences:safeExtraction] Using safe extraction for component set to avoid API errors`);
             } catch (setStructureError) {
               console.warn('Error extracting component set structure:', setStructureError);
+              // Don't rethrow to prevent loop
             }
             
             // Get variant properties for this component
@@ -380,9 +440,24 @@ function extractComponentReferences(node: any): any {
               // Extract the complete variant structure
               try {
                 console.log(`🧩 Extracting complete structure of variant: "${child.name}"`);
-                variantInfo.structure = extractNodeData(child);
+                // IMPORTANT: Instead of extracting the full structure which causes API errors,
+                // we'll extract just the essential metadata about the variant
+                variantInfo.safeStructure = {
+                  id: child.id,
+                  name: child.name,
+                  type: child.type,
+                  key: (child as ComponentNode).key,
+                  // Add basic properties where available without recursion
+                  description: (child as ComponentNode).description || null,
+                  width: 'width' in child ? child.width : undefined,
+                  height: 'height' in child ? child.height : undefined
+                };
+                
+                // Don't extract full structure recursively - this is causing the API error in func147
+                console.log(`[extractComponentReferences:safeExtraction] Using safe extraction for variant to avoid API errors`);
               } catch (variantStructureError) {
                 console.warn('Error extracting variant structure:', variantStructureError);
+                // Don't rethrow to prevent loop
               }
               
               // Get variant properties if available
@@ -408,9 +483,24 @@ function extractComponentReferences(node: any): any {
 /**
  * Recursively extract node data and properties
  * @param node The Figma node to extract data from
+ * @param depth Current recursion depth
  * @returns Object containing node data
  */
-function extractNodeData(node: BaseNode): any {
+function extractNodeData(node: BaseNode, depth: number = 0): any {
+  // Protect against excessive recursion
+  if (depth > MAX_EXTRACTION_DEPTH) {
+    console.warn(`[extractNodeData:maxDepthReached] Max recursion depth (${MAX_EXTRACTION_DEPTH}) reached for node ${node.id}. Stopping recursion.`);
+    return {
+      id: node.id,
+      name: node.name,
+      type: node.type,
+      note: "Max recursion depth reached"
+    };
+  }
+  
+  // Track current extraction depth
+  extractionDepth = Math.max(extractionDepth, depth);
+  
   // Base properties all nodes share
   const nodeData: any = {
     id: node.id,
@@ -494,7 +584,7 @@ function extractNodeData(node: BaseNode): any {
   if ('children' in node) {
     nodeData.children = [];
     for (const child of node.children) {
-      nodeData.children.push(extractNodeData(child));
+      nodeData.children.push(extractNodeData(child, depth + 1));
     }
   }
 
@@ -664,9 +754,9 @@ function structureAndValidateData(extractedData: any): any {
             };
             
             // Preserve the full component set structure if available
-            if (node.components.componentSet.structure) {
-              structuredData.design.componentSets[componentSetId].structure = 
-                node.components.componentSet.structure;
+            if (node.components.componentSet.safeStructure) {
+              structuredData.design.componentSets[componentSetId].safeStructure = 
+                node.components.componentSet.safeStructure;
             }
             
             structuredData.metadata.statistics.components.componentSets++;
@@ -716,9 +806,9 @@ function structureAndValidateData(extractedData: any): any {
             };
             
             // Preserve the full component set structure if available
-            if (node.components.componentSet.structure) {
-              structuredData.design.componentSets[componentSetId].structure = 
-                node.components.componentSet.structure;
+            if (node.components.componentSet.safeStructure) {
+              structuredData.design.componentSets[componentSetId].safeStructure = 
+                node.components.componentSet.safeStructure;
             }
             
             structuredData.metadata.statistics.components.componentSets++;
@@ -784,8 +874,8 @@ function structureAndValidateData(extractedData: any): any {
               };
               
               // Preserve the full variant structure if available
-              if (variant.structure) {
-                structuredData.design.components[variantId].structure = variant.structure;
+              if (variant.safeStructure) {
+                structuredData.design.components[variantId].safeStructure = variant.safeStructure;
               }
               
               structuredData.metadata.statistics.components.mainComponents++;
