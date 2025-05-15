@@ -710,14 +710,32 @@ function structureAndValidateData(extractedData: any): any {
         
         // Store the style in the styles dictionary if not already present
         if (!structuredData.design.styles[styleId]) {
-          // We need to add a proper style object from the extracted data
-          // For now, we'll create a minimal placeholder that will be populated
-          // when we process the actual style data
-          structuredData.design.styles[styleId] = {
-            id: styleId,
-            type: styleType,
-            name: `Style ${styleId}`
-          };
+          // Try to get the actual style information from Figma
+          try {
+            const style = figma.getStyleById(styleId);
+            if (style) {
+              structuredData.design.styles[styleId] = {
+                id: style.id,
+                name: style.name,
+                type: style.type,
+                description: style.description || null
+              };
+            } else {
+              // Fallback if style not found
+              structuredData.design.styles[styleId] = {
+                id: styleId,
+                type: styleType,
+                name: `Style ${styleId}`
+              };
+            }
+          } catch (error) {
+            // Fallback if error occurs
+            structuredData.design.styles[styleId] = {
+              id: styleId,
+              type: styleType,
+              name: `Style ${styleId}`
+            };
+          }
           
           // Update style statistics
           structuredData.metadata.statistics.styles.total++;
@@ -743,13 +761,44 @@ function structureAndValidateData(extractedData: any): any {
         
         // Store the variable in the variables dictionary if not already present
         if (!structuredData.design.variables[variableId]) {
-          // Create a placeholder that will be populated when we have the actual variable data
-          structuredData.design.variables[variableId] = {
-            id: variableId,
-            name: `Variable ${variableId}`,
-            // We'll set a default type that will be updated when we get the actual data
-            type: 'unknown'
-          };
+          // Try to get the actual variable info
+          try {
+            const variable = figma.variables.getVariableById(variableId);
+            if (variable) {
+              // Get collection info if possible
+              let collectionName = null;
+              try {
+                const collection = figma.variables.getVariableCollectionById(variable.variableCollectionId);
+                if (collection) {
+                  collectionName = collection.name;
+                }
+              } catch (collectionError) {
+                // Ignore collection errors
+              }
+              
+              structuredData.design.variables[variableId] = {
+                id: variable.id,
+                name: variable.name,
+                type: variable.resolvedType,
+                collectionName: collectionName,
+                key: variable.key
+              };
+            } else {
+              // Fallback
+              structuredData.design.variables[variableId] = {
+                id: variableId,
+                name: `Variable ${variableId}`,
+                type: 'unknown'
+              };
+            }
+          } catch (error) {
+            // Fallback
+            structuredData.design.variables[variableId] = {
+              id: variableId,
+              name: `Variable ${variableId}`,
+              type: 'unknown'
+            };
+          }
           
           // Update variable statistics
           structuredData.metadata.statistics.variables.total++;
@@ -781,27 +830,53 @@ function structureAndValidateData(extractedData: any): any {
         if (refType === 'mainComponent') {
           // This is an instance of a component
           if (!structuredData.design.components[refId]) {
-            structuredData.design.components[refId] = {
-              id: refId,
-              type: 'COMPONENT',
-              name: `Component ${refId}`,
-              instances: [] // Will store IDs of instances of this component
-            };
+            // Try to get actual component info
+            try {
+              let name = `Component ${refId}`;
+              let description = null;
+              
+              // If we have the node in our node map, we can get direct info
+              if (nodeMap.has(refId)) {
+                const node = nodeMap.get(refId);
+                name = node.name;
+                description = node.description || null;
+              }
+              // Otherwise try to get it from the mainComponent reference if it's an instance
+              else if (refType === 'mainComponent' && node.type === 'INSTANCE') {
+                const instance = node as InstanceNode;
+                if (instance.mainComponent) {
+                  name = instance.mainComponent.name;
+                  description = (instance.mainComponent as ComponentNode).description || null;
+                }
+              }
+              
+              structuredData.design.components[refId] = {
+                id: refId,
+                type: 'COMPONENT',
+                name: name,
+                description: description,
+                instances: [] // Will store IDs of instances of this component
+              };
+            } catch (error) {
+              // Fallback
+              structuredData.design.components[refId] = {
+                id: refId,
+                type: 'COMPONENT',
+                name: `Component ${refId}`,
+                instances: []
+              };
+            }
+            
+            // Update statistics
+            structuredData.metadata.statistics.components.instances++;
+            if (!componentIds.has(refId)) {
+              componentIds.add(refId);
+              structuredData.metadata.statistics.components.total++;
+            }
+            
+            // Track references
+            componentReferences.set(refId, [...(componentReferences.get(refId) || []), node.id]);
           }
-          
-          // Add this node as an instance of the component
-          structuredData.design.components[refId].instances = 
-            [...(structuredData.design.components[refId].instances || []), node.id];
-          
-          // Update statistics
-          structuredData.metadata.statistics.components.instances++;
-          if (!componentIds.has(refId)) {
-            componentIds.add(refId);
-            structuredData.metadata.statistics.components.total++;
-          }
-          
-          // Track references
-          componentReferences.set(refId, [...(componentReferences.get(refId) || []), node.id]);
         }
         else if (refType === 'componentDefinition') {
           // This is a component definition
@@ -826,12 +901,40 @@ function structureAndValidateData(extractedData: any): any {
         else if (refType === 'componentSet' || refType === 'componentSetDefinition') {
           // This is a component set
           if (!structuredData.design.componentSets[refId]) {
-            structuredData.design.componentSets[refId] = {
-              id: refId,
-              type: 'COMPONENT_SET',
-              name: `Component Set ${refId}`,
-              variants: [] // Will store IDs of variants in this set
-            };
+            // Try to get actual component set info
+            try {
+              let name = `Component Set ${refId}`;
+              
+              // If we have the node in our node map, we can get direct info
+              if (nodeMap.has(refId)) {
+                const node = nodeMap.get(refId);
+                name = node.name;
+              }
+              // Otherwise try to get name from parent if it's a component
+              else if (node.type === 'COMPONENT') {
+                // Use optional chaining to safely access parent properties
+                const componentNode = node as ComponentNode;
+                const parentType = componentNode.parent?.type;
+                if (parentType === 'COMPONENT_SET') {
+                  name = componentNode.parent?.name ?? `Component Set ${refId}`;
+                }
+              }
+              
+              structuredData.design.componentSets[refId] = {
+                id: refId,
+                type: 'COMPONENT_SET',
+                name: name,
+                variants: [] // Will store IDs of variants in this set
+              };
+            } catch (error) {
+              // Fallback
+              structuredData.design.componentSets[refId] = {
+                id: refId,
+                type: 'COMPONENT_SET',
+                name: `Component Set ${refId}`,
+                variants: []
+              };
+            }
             
             // Update statistics
             structuredData.metadata.statistics.components.componentSets++;
