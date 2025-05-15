@@ -714,12 +714,121 @@ function structureAndValidateData(extractedData: any): any {
           try {
             const style = figma.getStyleById(styleId);
             if (style) {
-              structuredData.design.styles[styleId] = {
+              const styleEntry: any = {
                 id: style.id,
                 name: style.name,
                 type: style.type,
                 description: style.description || null
               };
+              
+              // Extract type-specific style properties
+              if (style.type === 'TEXT') {
+                try {
+                  // For text styles, we need to find a node using this style to get properties
+                  // This is because Figma doesn't expose text style properties directly
+                  const nodesWithStyle = figma.currentPage.findAll(node => {
+                    return 'textStyleId' in node && node.textStyleId === styleId;
+                  });
+                  
+                  if (nodesWithStyle.length > 0) {
+                    const textNode = nodesWithStyle[0] as TextNode;
+                    styleEntry.fontName = textNode.fontName;
+                    styleEntry.fontSize = textNode.fontSize;
+                    styleEntry.letterSpacing = textNode.letterSpacing;
+                    styleEntry.lineHeight = textNode.lineHeight;
+                    styleEntry.textCase = textNode.textCase;
+                    styleEntry.textDecoration = textNode.textDecoration;
+                    styleEntry.paragraphIndent = textNode.paragraphIndent;
+                    styleEntry.paragraphSpacing = textNode.paragraphSpacing;
+                    styleEntry.textAlignHorizontal = textNode.textAlignHorizontal;
+                    styleEntry.textAlignVertical = textNode.textAlignVertical;
+                  } else {
+                    console.warn(`Couldn't find a node using text style: ${style.name}`);
+                  }
+                } catch (textStyleError: unknown) {
+                  console.warn(`Error extracting text style properties:`, textStyleError);
+                }
+              } 
+              else if (style.type === 'PAINT') {
+                try {
+                  // For paint styles, we need to find a node using this style to get properties
+                  const nodesWithStyle = figma.currentPage.findAll(node => {
+                    return 'fillStyleId' in node && node.fillStyleId === styleId;
+                  });
+                  
+                  if (nodesWithStyle.length > 0) {
+                    const node = nodesWithStyle[0] as SceneNode;
+                    if ('fills' in node && Array.isArray(node.fills) && node.fills.length > 0) {
+                      styleEntry.fills = node.fills;
+                    }
+                  } else {
+                    console.warn(`Couldn't find a node using paint style`);
+                  }
+                } catch (paintStyleError: unknown) {
+                  console.warn(`Error extracting paint style properties:`, paintStyleError);
+                }
+              }
+              else if (style.type === 'EFFECT') {
+                try {
+                  const nodesWithStyle = figma.currentPage.findAll(node => {
+                    return 'effectStyleId' in node && node.effectStyleId === styleId;
+                  });
+                  
+                  if (nodesWithStyle.length > 0) {
+                    const node = nodesWithStyle[0] as SceneNode;
+                    if ('effects' in node && Array.isArray(node.effects) && node.effects.length > 0) {
+                      styleEntry.effects = node.effects;
+                    }
+                  } else {
+                    console.warn(`Couldn't find a node using effect style`);
+                  }
+                } catch (effectStyleError: unknown) {
+                  console.warn(`Error extracting effect style properties:`, effectStyleError);
+                }
+              }
+              else if (String(style.type) === 'STROKE') {
+                try {
+                  const nodesWithStyle = figma.currentPage.findAll(node => {
+                    return 'strokeStyleId' in node && node.strokeStyleId === styleId;
+                  });
+                  
+                  if (nodesWithStyle.length > 0) {
+                    const node = nodesWithStyle[0] as SceneNode;
+                    if ('strokes' in node && Array.isArray(node.strokes) && node.strokes.length > 0) {
+                      styleEntry.strokes = node.strokes;
+                      if ('strokeWeight' in node) styleEntry.strokeWeight = node.strokeWeight;
+                      if ('strokeAlign' in node) styleEntry.strokeAlign = node.strokeAlign;
+                      if ('strokeCap' in node) styleEntry.strokeCap = node.strokeCap;
+                      if ('strokeJoin' in node) styleEntry.strokeJoin = node.strokeJoin;
+                      if ('strokeMiterLimit' in node) styleEntry.strokeMiterLimit = node.strokeMiterLimit;
+                    }
+                  } else {
+                    console.warn(`Couldn't find a node using stroke style`);
+                  }
+                } catch (strokeStyleError: unknown) {
+                  console.warn(`Error extracting stroke style properties:`, strokeStyleError);
+                }
+              }
+              else if (String(style.type) === 'GRID') {
+                try {
+                  const nodesWithStyle = figma.currentPage.findAll(node => {
+                    return 'gridStyleId' in node && node.gridStyleId === styleId;
+                  });
+                  
+                  if (nodesWithStyle.length > 0) {
+                    const node = nodesWithStyle[0] as FrameNode | ComponentNode | InstanceNode;
+                    if ('layoutGrids' in node && Array.isArray(node.layoutGrids) && node.layoutGrids.length > 0) {
+                      styleEntry.layoutGrids = node.layoutGrids;
+                    }
+                  } else {
+                    console.warn(`Couldn't find a node using grid style`);
+                  }
+                } catch (gridStyleError: unknown) {
+                  console.warn(`Error extracting grid style properties:`, gridStyleError);
+                }
+              }
+              
+              structuredData.design.styles[styleId] = styleEntry;
             } else {
               // Fallback if style not found
               structuredData.design.styles[styleId] = {
@@ -767,13 +876,53 @@ function structureAndValidateData(extractedData: any): any {
             if (variable) {
               // Get collection info if possible
               let collectionName = null;
+              let collectionModes = null;
               try {
                 const collection = figma.variables.getVariableCollectionById(variable.variableCollectionId);
                 if (collection) {
                   collectionName = collection.name;
+                  collectionModes = collection.modes;
                 }
               } catch (collectionError) {
                 // Ignore collection errors
+              }
+              
+              // Get the variable value for each mode
+              let valuesByMode: Record<string, any> = {};
+              try {
+                if (collectionModes && collectionModes.length > 0) {
+                  for (const mode of collectionModes) {
+                    try {
+                      const value = variable.valuesByMode[mode.modeId];
+                      if (value !== undefined) {
+                        valuesByMode[mode.name] = {
+                          modeId: mode.modeId,
+                          value: value
+                        };
+                        
+                        // For alias variables, try to resolve the reference
+                        if (typeof value === 'object' && value !== null && 'type' in value && value.type === 'VARIABLE_ALIAS') {
+                          try {
+                            const aliasVariable = figma.variables.getVariableById(value.id);
+                            if (aliasVariable) {
+                              valuesByMode[mode.name].resolvedVariable = {
+                                id: aliasVariable.id,
+                                name: aliasVariable.name,
+                                resolvedType: aliasVariable.resolvedType
+                              };
+                            }
+                          } catch (aliasError) {
+                            // Ignore alias resolution errors
+                          }
+                        }
+                      }
+                    } catch (modeError) {
+                      // Skip this mode if there's an error
+                    }
+                  }
+                }
+              } catch (valueError) {
+                // Ignore value extraction errors
               }
               
               structuredData.design.variables[variableId] = {
@@ -781,6 +930,8 @@ function structureAndValidateData(extractedData: any): any {
                 name: variable.name,
                 type: variable.resolvedType,
                 collectionName: collectionName,
+                collectionId: variable.variableCollectionId,
+                valuesByMode: valuesByMode,
                 key: variable.key
               };
             } else {
