@@ -12,6 +12,9 @@ console.log('UI shown, waiting for messages...');
 let extractionDepth = 0;
 const MAX_EXTRACTION_DEPTH = 5; // Limit recursion to 5 levels deep
 
+// Create a global set to track which components we've already processed
+const processedComponentIds = new Set<string>();
+
 /**
  * Extract variable information from a node
  * @param node The Figma node to extract variable information from
@@ -208,10 +211,12 @@ function extractComponentReferences(node: any): any {
         
         // Extract the complete node structure of the main component
         try {
-          // Use the same extraction logic we use for the main frame
           console.log(`[extractComponentReferences:mainComponentStructure] Extracting structure of component: "${instance.mainComponent.name}"`);
-          // IMPORTANT: Instead of extracting the full structure which causes API errors,
-          // we'll extract just the essential metadata about the component
+          // Use the dedicated function for component structure extraction
+          componentData.mainComponent.structure = extractComponentStructure(instance.mainComponent, 0);
+        } catch (structureError) {
+          console.warn(`[extractComponentReferences:mainComponentError] Error extracting main component structure:`, structureError);
+          // Fall back to safe extraction if there's an error
           componentData.mainComponent.safeStructure = {
             id: instance.mainComponent.id,
             name: instance.mainComponent.name,
@@ -222,12 +227,6 @@ function extractComponentReferences(node: any): any {
             width: 'width' in instance.mainComponent ? instance.mainComponent.width : undefined,
             height: 'height' in instance.mainComponent ? instance.mainComponent.height : undefined
           };
-          
-          // Don't extract full structure recursively - this is causing the API error in func147
-          console.log(`[extractComponentReferences:safeExtraction] Using safe extraction for main component to avoid API errors`);
-        } catch (structureError) {
-          console.warn(`[extractComponentReferences:mainComponentError] Error extracting main component structure:`, structureError);
-          // Don't rethrow to prevent loop
         }
         
         // Handle component properties with better error handling
@@ -431,41 +430,21 @@ function extractComponentReferences(node: any): any {
             if (child.type === 'COMPONENT') {
               console.log(`🧩 Found variant "${child.name}" in component set "${componentSet.name}"`);
               
-              const variantInfo: any = {
-                id: child.id,
-                name: child.name,
-                key: (child as ComponentNode).key
-              };
-              
-              // Extract the complete variant structure
               try {
-                console.log(`🧩 Extracting complete structure of variant: "${child.name}"`);
-                // IMPORTANT: Instead of extracting the full structure which causes API errors,
-                // we'll extract just the essential metadata about the variant
-                variantInfo.safeStructure = {
+                // Use the dedicated function for component structure extraction
+                const variantStructure = extractComponentStructure(child as ComponentNode, 0);
+                componentData.variants.push(variantStructure);
+              } catch (variantError: unknown) {
+                console.warn(`Error extracting variant structure for "${child.name}":`, variantError);
+                
+                // Fall back to minimal structure
+                componentData.variants.push({
                   id: child.id,
                   name: child.name,
-                  type: child.type,
                   key: (child as ComponentNode).key,
-                  // Add basic properties where available without recursion
-                  description: (child as ComponentNode).description || null,
-                  width: 'width' in child ? child.width : undefined,
-                  height: 'height' in child ? child.height : undefined
-                };
-                
-                // Don't extract full structure recursively - this is causing the API error in func147
-                console.log(`[extractComponentReferences:safeExtraction] Using safe extraction for variant to avoid API errors`);
-              } catch (variantStructureError) {
-                console.warn('Error extracting variant structure:', variantStructureError);
-                // Don't rethrow to prevent loop
+                  error: true
+                });
               }
-              
-              // Get variant properties if available
-              if ('variantProperties' in child) {
-                variantInfo.properties = (child as ComponentNode).variantProperties;
-              }
-              
-              componentData.variants.push(variantInfo);
             }
           }
         }
@@ -562,22 +541,70 @@ function extractNodeData(node: BaseNode, depth: number = 0): any {
     if ('textAlignVertical' in node) nodeData.textAlignVertical = node.textAlignVertical;
   }
 
-  // Extract variable references
+  // Extract variable references - store only the reference IDs, not full data
   const variableRefs = extractVariableReferences(node);
-  if (variableRefs) {
-    nodeData.variables = variableRefs;
+  if (variableRefs && variableRefs.boundVariables) {
+    // Store just the variable references instead of full variable data
+    nodeData.variableReferences = {};
+    for (const prop in variableRefs.boundVariables) {
+      const variable = variableRefs.boundVariables[prop];
+      nodeData.variableReferences[prop] = variable.id;
+    }
   }
 
-  // Extract style references
+  // Extract style references - store only the reference IDs, not full data
   const styleRefs = extractStyleReferences(node);
   if (styleRefs) {
-    nodeData.styles = styleRefs;
+    // Store just the style references instead of full style data
+    nodeData.styleReferences = {};
+    if (styleRefs.fillStyle) nodeData.styleReferences.fill = styleRefs.fillStyle.id;
+    if (styleRefs.textStyle) nodeData.styleReferences.text = styleRefs.textStyle.id;
+    if (styleRefs.strokeStyle) nodeData.styleReferences.stroke = styleRefs.strokeStyle.id;
+    if (styleRefs.effectStyle) nodeData.styleReferences.effect = styleRefs.effectStyle.id;
+    if (styleRefs.gridStyle) nodeData.styleReferences.grid = styleRefs.gridStyle.id;
   }
   
-  // Extract component information using the new function
+  // Extract component information - store only the reference IDs, not full data
   const componentRefs = extractComponentReferences(node);
   if (componentRefs) {
-    nodeData.components = componentRefs;
+    // Store just the component references instead of full component data
+    nodeData.componentReferences = {};
+    
+    if (componentRefs.mainComponent) {
+      nodeData.componentReferences.mainComponent = componentRefs.mainComponent.id;
+    }
+    
+    if (componentRefs.componentDefinition) {
+      nodeData.componentReferences.componentDefinition = componentRefs.componentDefinition.id;
+    }
+    
+    if (componentRefs.componentSet) {
+      nodeData.componentReferences.componentSet = componentRefs.componentSet.id;
+    }
+    
+    if (componentRefs.componentSetDefinition) {
+      nodeData.componentReferences.componentSetDefinition = componentRefs.componentSetDefinition.id;
+    }
+    
+    // Store component properties directly as they're not shared/repeated
+    if (componentRefs.componentProperties) {
+      nodeData.componentProperties = componentRefs.componentProperties;
+    }
+    
+    // Store variant properties directly as they're not shared/repeated
+    if (componentRefs.variantProperties) {
+      nodeData.variantProperties = componentRefs.variantProperties;
+    }
+    
+    // Store variant group properties directly as they're not shared/repeated
+    if (componentRefs.variantGroupProperties) {
+      nodeData.variantGroupProperties = componentRefs.variantGroupProperties;
+    }
+    
+    // Keep track of variants for component sets
+    if (componentRefs.variants) {
+      nodeData.componentReferences.variants = componentRefs.variants.map((variant: any) => variant.id);
+    }
   }
 
   // Recursively process children
@@ -676,232 +703,216 @@ function structureAndValidateData(extractedData: any): any {
     nodeMap.set(node.id, node);
     
     // Process styles
-    if (node.styles) {
-      if (node.styles.fillStyle) {
-        const styleId = node.styles.fillStyle.id;
+    if (node.styleReferences) {
+      for (const styleType in node.styleReferences) {
+        const styleId = node.styleReferences[styleType];
         styleIds.add(styleId);
-        structuredData.design.styles[styleId] = node.styles.fillStyle;
-        structuredData.metadata.statistics.styles.fill++;
-        styleReferences.set(styleId, [...(styleReferences.get(styleId) || []), node.id]);
-      }
-      if (node.styles.textStyle) {
-        const styleId = node.styles.textStyle.id;
-        styleIds.add(styleId);
-        structuredData.design.styles[styleId] = node.styles.textStyle;
-        structuredData.metadata.statistics.styles.text++;
-        styleReferences.set(styleId, [...(styleReferences.get(styleId) || []), node.id]);
-      }
-      if (node.styles.strokeStyle) {
-        const styleId = node.styles.strokeStyle.id;
-        styleIds.add(styleId);
-        structuredData.design.styles[styleId] = node.styles.strokeStyle;
-        structuredData.metadata.statistics.styles.stroke++;
-        styleReferences.set(styleId, [...(styleReferences.get(styleId) || []), node.id]);
-      }
-      if (node.styles.effectStyle) {
-        const styleId = node.styles.effectStyle.id;
-        styleIds.add(styleId);
-        structuredData.design.styles[styleId] = node.styles.effectStyle;
-        structuredData.metadata.statistics.styles.effect++;
-        styleReferences.set(styleId, [...(styleReferences.get(styleId) || []), node.id]);
-      }
-      if (node.styles.gridStyle) {
-        const styleId = node.styles.gridStyle.id;
-        styleIds.add(styleId);
-        structuredData.design.styles[styleId] = node.styles.gridStyle;
-        structuredData.metadata.statistics.styles.grid++;
+        
+        // Store the style in the styles dictionary if not already present
+        if (!structuredData.design.styles[styleId]) {
+          // We need to add a proper style object from the extracted data
+          // For now, we'll create a minimal placeholder that will be populated
+          // when we process the actual style data
+          structuredData.design.styles[styleId] = {
+            id: styleId,
+            type: styleType,
+            name: `Style ${styleId}`
+          };
+          
+          // Update style statistics
+          structuredData.metadata.statistics.styles.total++;
+          
+          // Update type-specific style counts
+          if (styleType === 'fill') structuredData.metadata.statistics.styles.fill++;
+          else if (styleType === 'text') structuredData.metadata.statistics.styles.text++;
+          else if (styleType === 'stroke') structuredData.metadata.statistics.styles.stroke++;
+          else if (styleType === 'effect') structuredData.metadata.statistics.styles.effect++;
+          else if (styleType === 'grid') structuredData.metadata.statistics.styles.grid++;
+        }
+        
+        // Add reference from style to node
         styleReferences.set(styleId, [...(styleReferences.get(styleId) || []), node.id]);
       }
     }
     
     // Process variables
-    if (node.variables && node.variables.boundVariables) {
-      for (const prop in node.variables.boundVariables) {
-        const variable = node.variables.boundVariables[prop];
-        const variableId = variable.id;
+    if (node.variableReferences) {
+      for (const prop in node.variableReferences) {
+        const variableId = node.variableReferences[prop];
         variableIds.add(variableId);
-        structuredData.design.variables[variableId] = variable;
         
-        // Track variable types for statistics
-        const variableType = variable.resolvedType || 'unknown';
-        structuredData.metadata.statistics.variables.byType[variableType] = 
-          (structuredData.metadata.statistics.variables.byType[variableType] || 0) + 1;
+        // Store the variable in the variables dictionary if not already present
+        if (!structuredData.design.variables[variableId]) {
+          // Create a placeholder that will be populated when we have the actual variable data
+          structuredData.design.variables[variableId] = {
+            id: variableId,
+            name: `Variable ${variableId}`,
+            // We'll set a default type that will be updated when we get the actual data
+            type: 'unknown'
+          };
+          
+          // Update variable statistics
+          structuredData.metadata.statistics.variables.total++;
+          
+          // Update type-specific variable counts (will be updated when we have actual type data)
+          const variableType = 'unknown';
+          structuredData.metadata.statistics.variables.byType[variableType] = 
+            (structuredData.metadata.statistics.variables.byType[variableType] || 0) + 1;
+        }
         
+        // Add reference from variable to node
         variableReferences.set(variableId, [...(variableReferences.get(variableId) || []), node.id]);
+        
+        // Store the property mapping in the node
+        if (!nodeMap.get(node.id).variableMappings) {
+          nodeMap.get(node.id).variableMappings = {};
+        }
+        nodeMap.get(node.id).variableMappings[prop] = variableId;
       }
     }
     
     // Process component instances, definitions, and sets
-    if (node.components) {
-      // Handle mainComponent reference (instances)
-      if (node.components.mainComponent) {
-        const componentId = node.components.mainComponent.id;
-        componentIds.add(componentId);
-        structuredData.design.components[componentId] = node.components.mainComponent;
-        structuredData.metadata.statistics.components.instances++;
-        componentReferences.set(componentId, [...(componentReferences.get(componentId) || []), node.id]);
+    if (node.componentReferences) {
+      // First pass: Register all components and component sets
+      for (const refType in node.componentReferences) {
+        const refId = node.componentReferences[refType];
         
-        // Handle component set relationships for instances
-        if (node.components.componentSet) {
-          const componentSetId = node.components.componentSet.id;
-          componentSetIds.add(componentSetId);
+        // Handle different reference types
+        if (refType === 'mainComponent') {
+          // This is an instance of a component
+          if (!structuredData.design.components[refId]) {
+            structuredData.design.components[refId] = {
+              id: refId,
+              type: 'COMPONENT',
+              name: `Component ${refId}`,
+              instances: [] // Will store IDs of instances of this component
+            };
+          }
           
-          // Add the component set to the dictionary if not already present
-          if (!structuredData.design.componentSets[componentSetId]) {
-            structuredData.design.componentSets[componentSetId] = {
-              ...node.components.componentSet,
-              variants: []
+          // Add this node as an instance of the component
+          structuredData.design.components[refId].instances = 
+            [...(structuredData.design.components[refId].instances || []), node.id];
+          
+          // Update statistics
+          structuredData.metadata.statistics.components.instances++;
+          if (!componentIds.has(refId)) {
+            componentIds.add(refId);
+            structuredData.metadata.statistics.components.total++;
+          }
+          
+          // Track references
+          componentReferences.set(refId, [...(componentReferences.get(refId) || []), node.id]);
+        }
+        else if (refType === 'componentDefinition') {
+          // This is a component definition
+          if (!structuredData.design.components[refId]) {
+            structuredData.design.components[refId] = {
+              id: refId,
+              type: 'COMPONENT',
+              name: `Component ${refId}`
+            };
+          }
+          
+          // Update statistics
+          structuredData.metadata.statistics.components.mainComponents++;
+          if (!componentIds.has(refId)) {
+            componentIds.add(refId);
+            structuredData.metadata.statistics.components.total++;
+          }
+          
+          // Track references
+          componentReferences.set(refId, [...(componentReferences.get(refId) || []), node.id]);
+        }
+        else if (refType === 'componentSet' || refType === 'componentSetDefinition') {
+          // This is a component set
+          if (!structuredData.design.componentSets[refId]) {
+            structuredData.design.componentSets[refId] = {
+              id: refId,
+              type: 'COMPONENT_SET',
+              name: `Component Set ${refId}`,
+              variants: [] // Will store IDs of variants in this set
             };
             
-            // Preserve the full component set structure if available
-            if (node.components.componentSet.safeStructure) {
-              structuredData.design.componentSets[componentSetId].safeStructure = 
-                node.components.componentSet.safeStructure;
-            }
-            
+            // Update statistics
             structuredData.metadata.statistics.components.componentSets++;
-          }
-          
-          // Link the component to its parent component set
-          componentToSetMap.set(componentId, componentSetId);
-          
-          // Add variant information if available
-          if (node.components.variantProperties) {
-            structuredData.design.components[componentId].variantProperties = node.components.variantProperties;
-          }
-          
-          // Add this component to the component set's variants list if not already present
-          const existingVariants = structuredData.design.componentSets[componentSetId].variants || [];
-          if (!existingVariants.some((v: any) => v.id === componentId)) {
-            structuredData.design.componentSets[componentSetId].variants = [
-              ...existingVariants,
-              {
-                id: componentId,
-                name: node.components.mainComponent.name,
-                variantProperties: node.components.variantProperties
-              }
-            ];
+            if (!componentSetIds.has(refId)) {
+              componentSetIds.add(refId);
+            }
           }
         }
       }
       
-      // Handle componentDefinition reference
-      if (node.components.componentDefinition) {
-        const componentId = node.components.componentDefinition.id;
-        componentIds.add(componentId);
-        structuredData.design.components[componentId] = node.components.componentDefinition;
-        structuredData.metadata.statistics.components.mainComponents++;
-        componentReferences.set(componentId, [...(componentReferences.get(componentId) || []), node.id]);
+      // Second pass: Handle relationships between components and component sets
+      // Component to component set relationships
+      if (node.componentReferences.componentSet) {
+        const componentId = node.id;
+        const componentSetId = node.componentReferences.componentSet;
         
-        // Handle component set relationships for component definitions
-        if (node.components.componentSet) {
-          const componentSetId = node.components.componentSet.id;
-          componentSetIds.add(componentSetId);
-          
-          // Add the component set to the dictionary if not already present
-          if (!structuredData.design.componentSets[componentSetId]) {
-            structuredData.design.componentSets[componentSetId] = {
-              ...node.components.componentSet,
-              variants: []
+        // Link the component to its parent component set
+        if (structuredData.design.components[componentId]) {
+          structuredData.design.components[componentId].componentSetId = componentSetId;
+        }
+        
+        // Add the component as a variant in the component set
+        if (structuredData.design.componentSets[componentSetId] && 
+            !structuredData.design.componentSets[componentSetId].variants.includes(componentId)) {
+          structuredData.design.componentSets[componentSetId].variants.push(componentId);
+        }
+        
+        // Update the map for quick lookup
+        componentToSetMap.set(componentId, componentSetId);
+      }
+      
+      // Handle variant components within a component set
+      if (node.componentReferences.variants && Array.isArray(node.componentReferences.variants)) {
+        const componentSetId = node.id;
+        
+        for (const variantId of node.componentReferences.variants) {
+          // Register the variant component if not already done
+          if (!structuredData.design.components[variantId]) {
+            structuredData.design.components[variantId] = {
+              id: variantId,
+              type: 'COMPONENT',
+              name: `Variant ${variantId}`,
+              componentSetId: componentSetId // Link to parent component set
             };
             
-            // Preserve the full component set structure if available
-            if (node.components.componentSet.safeStructure) {
-              structuredData.design.componentSets[componentSetId].safeStructure = 
-                node.components.componentSet.safeStructure;
+            // Update statistics
+            structuredData.metadata.statistics.components.mainComponents++;
+            if (!componentIds.has(variantId)) {
+              componentIds.add(variantId);
+              structuredData.metadata.statistics.components.total++;
             }
-            
-            structuredData.metadata.statistics.components.componentSets++;
           }
           
-          // Link the component to its parent component set
-          componentToSetMap.set(componentId, componentSetId);
-          
-          // Add variant information if available
-          if (node.components.variantProperties) {
-            structuredData.design.components[componentId].variantProperties = node.components.variantProperties;
+          // Add the variant to the component set's variants list if not already there
+          if (structuredData.design.componentSets[componentSetId] && 
+              !structuredData.design.componentSets[componentSetId].variants.includes(variantId)) {
+            structuredData.design.componentSets[componentSetId].variants.push(variantId);
           }
           
-          // Add this component to the component set's variants list if not already present
-          const existingVariants = structuredData.design.componentSets[componentSetId].variants || [];
-          if (!existingVariants.some((v: any) => v.id === componentId)) {
-            structuredData.design.componentSets[componentSetId].variants = [
-              ...existingVariants,
-              {
-                id: componentId,
-                name: node.components.componentDefinition.name,
-                variantProperties: node.components.variantProperties
-              }
-            ];
-          }
+          // Update the map for quick lookup
+          componentToSetMap.set(variantId, componentSetId);
         }
       }
       
-      // Handle componentSetDefinition reference (component sets)
-      if (node.components.componentSetDefinition) {
-        const componentSetId = node.components.componentSetDefinition.id;
-        componentSetIds.add(componentSetId);
-        
-        // Create or update the component set in the dictionary
-        if (!structuredData.design.componentSets[componentSetId]) {
-          structuredData.design.componentSets[componentSetId] = {
-            ...node.components.componentSetDefinition,
-            variants: []
-          };
-          structuredData.metadata.statistics.components.componentSets++;
+      // Add component properties and variant properties to the node
+      if (node.componentProperties) {
+        if (structuredData.design.components[node.id]) {
+          structuredData.design.components[node.id].properties = node.componentProperties;
         }
-        
-        // Add variant group properties if available
-        if (node.components.variantGroupProperties) {
-          structuredData.design.componentSets[componentSetId].variantGroupProperties = 
-            node.components.variantGroupProperties;
+      }
+      
+      if (node.variantProperties) {
+        if (structuredData.design.components[node.id]) {
+          structuredData.design.components[node.id].variantProperties = node.variantProperties;
         }
-        
-        // Add variant components from the component set definition
-        if (node.components.variants && Array.isArray(node.components.variants)) {
-          // For each variant, add it to the components dictionary and link to the component set
-          node.components.variants.forEach((variant: any) => {
-            const variantId = variant.id;
-            componentIds.add(variantId);
-            
-            // Add the variant to the components dictionary
-            if (!structuredData.design.components[variantId]) {
-              structuredData.design.components[variantId] = {
-                id: variantId,
-                name: variant.name,
-                key: variant.key,
-                componentSetId: componentSetId // Reference back to the parent
-              };
-              
-              // Preserve the full variant structure if available
-              if (variant.safeStructure) {
-                structuredData.design.components[variantId].safeStructure = variant.safeStructure;
-              }
-              
-              structuredData.metadata.statistics.components.mainComponents++;
-            }
-            
-            // Add variant properties if available
-            if (variant.properties) {
-              structuredData.design.components[variantId].variantProperties = variant.properties;
-            }
-            
-            // Link the component to its parent component set
-            componentToSetMap.set(variantId, componentSetId);
-            
-            // Add to the component set's variants list if not already present
-            const existingVariants = structuredData.design.componentSets[componentSetId].variants || [];
-            if (!existingVariants.some((v: any) => v.id === variantId)) {
-              structuredData.design.componentSets[componentSetId].variants = [
-                ...existingVariants,
-                {
-                  id: variantId,
-                  name: variant.name,
-                  variantProperties: variant.properties
-                }
-              ];
-            }
-          });
+      }
+      
+      // Add variant group properties to component sets
+      if (node.variantGroupProperties) {
+        if (structuredData.design.componentSets[node.id]) {
+          structuredData.design.componentSets[node.id].variantGroupProperties = node.variantGroupProperties;
         }
       }
     }
@@ -1127,4 +1138,59 @@ figma.on('selectionchange', sendSelectionDetails);
 
 // Send initial selection state
 console.log('Sending initial selection state');
-sendSelectionDetails(); 
+sendSelectionDetails();
+
+// Add this function to get component structure with controlled recursion
+function extractComponentStructure(component: ComponentNode | InstanceNode, depth: number = 0): any {
+  // Skip if already processed or max depth reached
+  if (processedComponentIds.has(component.id) || depth > MAX_EXTRACTION_DEPTH) {
+    return {
+      id: component.id,
+      name: component.name,
+      type: component.type,
+      reference: true  // Flag to indicate this is just a reference
+    };
+  }
+  
+  // Mark as processed to avoid cycles
+  processedComponentIds.add(component.id);
+  
+  try {
+    // Only log at certain depths to reduce console noise for deep hierarchies
+    if (depth <= 1 || depth % 2 === 0) {
+      console.log(`[extractComponentStructure] Processing ${component.type} "${component.name}" at depth ${depth}`);
+    }
+    
+    // Extract the basic structure using your existing extractNodeData function
+    const structure = extractNodeData(component, depth);
+    
+    // Add any component-specific properties
+    if (component.type === 'COMPONENT') {
+      const componentNode = component as ComponentNode;
+      structure.description = componentNode.description || null;
+      
+      // Add documentation links if they exist
+      if (componentNode.documentationLinks && componentNode.documentationLinks.length > 0) {
+        structure.documentationLinks = componentNode.documentationLinks;
+      }
+      
+      // Get any published name (different from internal name)
+      if ('publishedName' in componentNode) {
+        structure.publishedName = componentNode.publishedName;
+      }
+    }
+    
+    return structure;
+  } catch (error: unknown) {
+    console.warn(`[extractComponentStructure] Error extracting structure for ${component.type} "${component.name}":`, error);
+    
+    // Return a minimal safe structure on error
+    return {
+      id: component.id,
+      name: component.name,
+      type: component.type,
+      error: true,
+      errorMessage: error instanceof Error ? error.message : 'Unknown error during structure extraction'
+    };
+  }
+} 
