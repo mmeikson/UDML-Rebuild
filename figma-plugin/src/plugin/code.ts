@@ -726,7 +726,12 @@ function structureAndValidateData(extractedData: any): any {
                 try {
                   // For text styles, we need to find a node using this style to get properties
                   // This is because Figma doesn't expose text style properties directly
+                  // Limit the search to avoid performance issues
+                  const searchLimit = 100;
+                  let foundNodes = 0;
                   const nodesWithStyle = figma.currentPage.findAll(node => {
+                    if (foundNodes >= searchLimit) return false;
+                    foundNodes++;
                     return 'textStyleId' in node && node.textStyleId === styleId;
                   });
                   
@@ -743,88 +748,151 @@ function structureAndValidateData(extractedData: any): any {
                     styleEntry.textAlignHorizontal = textNode.textAlignHorizontal;
                     styleEntry.textAlignVertical = textNode.textAlignVertical;
                   } else {
-                    console.warn(`Couldn't find a node using text style: ${style.name}`);
+                    console.warn(`Couldn't find a node using text style - style will have limited properties`);
+                    // Add a flag to indicate that we couldn't find complete style properties
+                    styleEntry.propertiesIncomplete = true;
                   }
                 } catch (textStyleError: unknown) {
                   console.warn(`Error extracting text style properties:`, textStyleError);
+                  // Add a flag to indicate that we encountered an error
+                  styleEntry.extractionError = true;
                 }
               } 
               else if (style.type === 'PAINT') {
                 try {
-                  // For paint styles, we need to find a node using this style to get properties
-                  const nodesWithStyle = figma.currentPage.findAll(node => {
-                    return 'fillStyleId' in node && node.fillStyleId === styleId;
-                  });
-                  
-                  if (nodesWithStyle.length > 0) {
-                    const node = nodesWithStyle[0] as SceneNode;
-                    if ('fills' in node && Array.isArray(node.fills) && node.fills.length > 0) {
-                      styleEntry.fills = node.fills;
-                    }
+                  // First try to get paint style values directly from the style object if possible
+                  if ('paints' in style && Array.isArray(style.paints) && style.paints.length > 0) {
+                    styleEntry.fills = style.paints;
                   } else {
-                    console.warn(`Couldn't find a node using paint style`);
+                    // Fallback to finding a node with the style
+                    // Limit the search to avoid performance issues
+                    const searchLimit = 100;
+                    let foundNodes = 0;
+                    const nodesWithStyle = figma.currentPage.findAll(node => {
+                      if (foundNodes >= searchLimit) return false;
+                      foundNodes++;
+                      return 'fillStyleId' in node && node.fillStyleId === styleId;
+                    });
+                    
+                    if (nodesWithStyle.length > 0) {
+                      const node = nodesWithStyle[0] as SceneNode;
+                      if ('fills' in node && Array.isArray(node.fills) && node.fills.length > 0) {
+                        styleEntry.fills = node.fills;
+                      }
+                    } else {
+                      console.warn(`Couldn't find a node using paint style - style will have limited properties`);
+                      // Add a flag to indicate that we couldn't find complete style properties
+                      styleEntry.propertiesIncomplete = true;
+                    }
                   }
                 } catch (paintStyleError: unknown) {
                   console.warn(`Error extracting paint style properties:`, paintStyleError);
+                  // Add a flag to indicate that we encountered an error
+                  styleEntry.extractionError = true;
                 }
               }
               else if (style.type === 'EFFECT') {
                 try {
-                  const nodesWithStyle = figma.currentPage.findAll(node => {
-                    return 'effectStyleId' in node && node.effectStyleId === styleId;
-                  });
-                  
-                  if (nodesWithStyle.length > 0) {
-                    const node = nodesWithStyle[0] as SceneNode;
-                    if ('effects' in node && Array.isArray(node.effects) && node.effects.length > 0) {
-                      styleEntry.effects = node.effects;
-                    }
+                  // First try to get effect style values directly from the style object if possible
+                  if ('effects' in style && Array.isArray(style.effects) && style.effects.length > 0) {
+                    styleEntry.effects = style.effects;
                   } else {
-                    console.warn(`Couldn't find a node using effect style`);
+                    // Fallback to finding a node with the style
+                    // Limit the search to avoid performance issues
+                    const searchLimit = 100;
+                    let foundNodes = 0;
+                    const nodesWithStyle = figma.currentPage.findAll(node => {
+                      if (foundNodes >= searchLimit) return false;
+                      foundNodes++;
+                      return 'effectStyleId' in node && node.effectStyleId === styleId;
+                    });
+                    
+                    if (nodesWithStyle.length > 0) {
+                      const node = nodesWithStyle[0] as SceneNode;
+                      if ('effects' in node && Array.isArray(node.effects) && node.effects.length > 0) {
+                        styleEntry.effects = node.effects;
+                      }
+                    } else {
+                      console.warn(`Couldn't find a node using effect style - style will have limited properties`);
+                      // Add a flag to indicate that we couldn't find complete style properties
+                      styleEntry.propertiesIncomplete = true;
+                    }
                   }
                 } catch (effectStyleError: unknown) {
                   console.warn(`Error extracting effect style properties:`, effectStyleError);
+                  // Add a flag to indicate that we encountered an error
+                  styleEntry.extractionError = true;
                 }
               }
               else if (String(style.type) === 'STROKE') {
                 try {
-                  const nodesWithStyle = figma.currentPage.findAll(node => {
-                    return 'strokeStyleId' in node && node.strokeStyleId === styleId;
-                  });
-                  
-                  if (nodesWithStyle.length > 0) {
-                    const node = nodesWithStyle[0] as SceneNode;
-                    if ('strokes' in node && Array.isArray(node.strokes) && node.strokes.length > 0) {
-                      styleEntry.strokes = node.strokes;
-                      if ('strokeWeight' in node) styleEntry.strokeWeight = node.strokeWeight;
-                      if ('strokeAlign' in node) styleEntry.strokeAlign = node.strokeAlign;
-                      if ('strokeCap' in node) styleEntry.strokeCap = node.strokeCap;
-                      if ('strokeJoin' in node) styleEntry.strokeJoin = node.strokeJoin;
-                      if ('strokeMiterLimit' in node) styleEntry.strokeMiterLimit = node.strokeMiterLimit;
-                    }
+                  // First try to get stroke style values directly from the style object if possible
+                  if ('strokes' in style && Array.isArray(style.strokes) && style.strokes.length > 0) {
+                    styleEntry.strokes = style.strokes;
                   } else {
-                    console.warn(`Couldn't find a node using stroke style`);
+                    // Fallback to finding a node with the style
+                    // Limit the search to avoid performance issues
+                    const searchLimit = 100;
+                    let foundNodes = 0;
+                    const nodesWithStyle = figma.currentPage.findAll(node => {
+                      if (foundNodes >= searchLimit) return false;
+                      foundNodes++;
+                      return 'strokeStyleId' in node && node.strokeStyleId === styleId;
+                    });
+                    
+                    if (nodesWithStyle.length > 0) {
+                      const node = nodesWithStyle[0] as SceneNode;
+                      if ('strokes' in node && Array.isArray(node.strokes) && node.strokes.length > 0) {
+                        styleEntry.strokes = node.strokes;
+                        if ('strokeWeight' in node) styleEntry.strokeWeight = node.strokeWeight;
+                        if ('strokeAlign' in node) styleEntry.strokeAlign = node.strokeAlign;
+                        if ('strokeCap' in node) styleEntry.strokeCap = node.strokeCap;
+                        if ('strokeJoin' in node) styleEntry.strokeJoin = node.strokeJoin;
+                        if ('strokeMiterLimit' in node) styleEntry.strokeMiterLimit = node.strokeMiterLimit;
+                      }
+                    } else {
+                      console.warn(`Couldn't find a node using stroke style - style will have limited properties`);
+                      // Add a flag to indicate that we couldn't find complete style properties
+                      styleEntry.propertiesIncomplete = true;
+                    }
                   }
                 } catch (strokeStyleError: unknown) {
                   console.warn(`Error extracting stroke style properties:`, strokeStyleError);
+                  // Add a flag to indicate that we encountered an error
+                  styleEntry.extractionError = true;
                 }
               }
               else if (String(style.type) === 'GRID') {
                 try {
-                  const nodesWithStyle = figma.currentPage.findAll(node => {
-                    return 'gridStyleId' in node && node.gridStyleId === styleId;
-                  });
-                  
-                  if (nodesWithStyle.length > 0) {
-                    const node = nodesWithStyle[0] as FrameNode | ComponentNode | InstanceNode;
-                    if ('layoutGrids' in node && Array.isArray(node.layoutGrids) && node.layoutGrids.length > 0) {
-                      styleEntry.layoutGrids = node.layoutGrids;
-                    }
+                  // First try to get grid style values directly from the style object if possible
+                  if ('layoutGrids' in style && Array.isArray(style.layoutGrids) && style.layoutGrids.length > 0) {
+                    styleEntry.layoutGrids = style.layoutGrids;
                   } else {
-                    console.warn(`Couldn't find a node using grid style`);
+                    // Fallback to finding a node with the style
+                    // Limit the search to avoid performance issues
+                    const searchLimit = 100;
+                    let foundNodes = 0;
+                    const nodesWithStyle = figma.currentPage.findAll(node => {
+                      if (foundNodes >= searchLimit) return false;
+                      foundNodes++;
+                      return 'gridStyleId' in node && node.gridStyleId === styleId;
+                    });
+                    
+                    if (nodesWithStyle.length > 0) {
+                      const node = nodesWithStyle[0] as FrameNode | ComponentNode | InstanceNode;
+                      if ('layoutGrids' in node && Array.isArray(node.layoutGrids) && node.layoutGrids.length > 0) {
+                        styleEntry.layoutGrids = node.layoutGrids;
+                      }
+                    } else {
+                      console.warn(`Couldn't find a node using grid style - style will have limited properties`);
+                      // Add a flag to indicate that we couldn't find complete style properties
+                      styleEntry.propertiesIncomplete = true;
+                    }
                   }
                 } catch (gridStyleError: unknown) {
                   console.warn(`Error extracting grid style properties:`, gridStyleError);
+                  // Add a flag to indicate that we encountered an error
+                  styleEntry.extractionError = true;
                 }
               }
               
