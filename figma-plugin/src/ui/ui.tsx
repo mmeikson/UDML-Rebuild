@@ -19,26 +19,12 @@ function initUI() {
 function setupUI() {
   console.log('Setting up UI elements...');
   
-  // First try to show some visible status
-  try {
-    const statusElement = document.getElementById('status');
-    if (statusElement) {
-      statusElement.textContent = '🔍 UI script running...';
-      statusElement.style.color = '#18A0FB';
-    } else {
-      console.error('Status element not found in DOM!');
-    }
-  } catch (err: any) {
-    console.error('Error updating status:', err);
-  }
-
   try {
     // DOM elements
     const extractButton = document.getElementById('extract') as HTMLButtonElement;
     const cancelButton = document.getElementById('cancel') as HTMLButtonElement;
     const statusDiv = document.getElementById('status') as HTMLDivElement;
     const errorDiv = document.getElementById('error') as HTMLDivElement;
-    const frameDetailsDiv = document.getElementById('frame-details') as HTMLDivElement;
     const spinnerDiv = document.getElementById('spinner') as HTMLDivElement;
     
     // Create a results container for showing the JSON preview
@@ -97,7 +83,7 @@ function setupUI() {
     actionsContainer.style.marginTop = '16px';
     actionsContainer.style.textAlign = 'center';
     
-    // Add the actions container to the DOM - either to main container or body
+    // Add the actions container to the DOM
     if (container) {
       container.appendChild(actionsContainer);
     } else {
@@ -131,46 +117,6 @@ function setupUI() {
     doneButton.style.cursor = 'pointer';
     doneButton.style.fontWeight = 'bold';
     actionsContainer.appendChild(doneButton);
-    
-    if (!extractButton || !cancelButton || !statusDiv || !errorDiv || !frameDetailsDiv || !spinnerDiv) {
-      console.error('Some UI elements not found!', {
-        extractButton: !!extractButton,
-        cancelButton: !!cancelButton,
-        statusDiv: !!statusDiv,
-        errorDiv: !!errorDiv,
-        frameDetailsDiv: !!frameDetailsDiv,
-        spinnerDiv: !!spinnerDiv
-      });
-      return;
-    }
-
-    let currentSelection: any = null;
-    let extractedJson: string | null = null;
-    let extractedName: string | null = null;
-
-    // Show/hide spinner
-    const showSpinner = (show: boolean) => {
-      spinnerDiv.style.display = show ? 'block' : 'none';
-    };
-
-    // Show status message (success)
-    const showStatus = (message: string) => {
-      statusDiv.textContent = `✔️ ${message}`;
-      statusDiv.style.color = '#18A0FB';
-      errorDiv.textContent = '';
-      showSpinner(false);
-      // Also log to console for debugging
-      console.log('Status:', message);
-    };
-
-    // Show error message
-    const showError = (message: string) => {
-      errorDiv.textContent = `⚠️ ${message}`;
-      statusDiv.textContent = '';
-      showSpinner(false);
-      // Also log to console for debugging
-      console.error('Error:', message);
-    };
 
     // Configure download button functionality
     const setupDownloadButton = (json: string, name: string) => {
@@ -184,7 +130,6 @@ function setupUI() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        showStatus(`Downloading JSON for "${name}"`);
       };
       
       // Set the same function for both download buttons
@@ -220,9 +165,6 @@ function setupUI() {
         // Setup download functionality
         setupDownloadButton(json, name);
         
-        // Hide extract button once data is extracted
-        extractButton.style.display = 'none';
-        
         // Setup done button
         doneButton.onclick = () => {
           parent.postMessage({ pluginMessage: { type: 'close' } }, '*');
@@ -235,138 +177,8 @@ function setupUI() {
       }
     };
 
-    // Update frame details UI
-    const updateFrameDetails = (selection: any) => {
-      if (!selection) {
-        frameDetailsDiv.style.display = 'none';
-        extractButton.disabled = true;
-        showStatus('No valid frame selected. Please select a frame, component, or instance.');
-        return;
-      }
-      frameDetailsDiv.style.display = 'block';
-      frameDetailsDiv.innerHTML = `
-        <strong>Selected:</strong> ${selection.name} <br/>
-        <strong>Type:</strong> ${selection.type} <br/>
-        <strong>Size:</strong> ${Math.round(selection.width)} × ${Math.round(selection.height)} px <br/>
-        ${selection.parent ? `<strong>Parent:</strong> ${selection.parent}` : ''}
-      `;
-      extractButton.disabled = false;
-      extractButton.style.display = 'inline-block';
-      showStatus('Ready to extract the selected frame.');
-    };
-
-    // Reset the UI state
-    const resetUI = () => {
-      if (resultsContainer) {
-        resultsContainer.style.display = 'none';
-      }
-      if (jsonDataContainer) {
-        jsonDataContainer.textContent = '';
-      }
-      if (downloadButton) {
-        downloadButton.style.display = 'none';
-      }
-      if (headerDownloadButton) {
-        headerDownloadButton.style.display = 'none';
-      }
-      if (doneButton) {
-        doneButton.style.display = 'none';
-      }
-      if (actionsContainer) {
-        actionsContainer.style.display = 'none';
-      }
-      if (extractButton) {
-        extractButton.style.display = 'inline-block';
-      }
-      extractedJson = null;
-      extractedName = null;
-    };
-
-    // Message handler for communication from the plugin code
-    window.onmessage = (event) => {
-      console.log('MESSAGE RECEIVED:', event.data);
-      const message = event.data.pluginMessage;
-      if (!message) {
-        console.log('No pluginMessage in event data');
-        return;
-      }
-      
-      console.log('Processing message type:', message.type);
-      showStatus(`Received message: ${message.type}`);
-      
-      switch (message.type) {
-        case 'plugin-ready':
-          showStatus('Plugin ready. Select a frame and click "Extract".');
-          showSpinner(false);
-          resetUI();
-          break;
-        case 'selection-update':
-          showStatus(`Selection update received: ${message.selection ? message.selection.name : 'None'}`);
-          currentSelection = message.selection;
-          updateFrameDetails(currentSelection);
-          showSpinner(false);
-          break;
-        case 'extraction-complete':
-          showSpinner(false);
-          showStatus(`Extraction complete for "${message.data.name}". Processing...`);
-          console.log('Extracted data received:', message.data);
-          
-          // Store the extracted data
-          extractedJson = message.data.json;
-          extractedName = message.data.name;
-          
-          // Display the JSON preview
-          if (extractedJson && extractedName) {
-            displayJsonPreview(extractedJson, extractedName);
-            showStatus(`Data extracted successfully from "${extractedName}"! You can now download the JSON.`);
-          } else {
-            showError('Extracted data incomplete');
-          }
-          break;
-        case 'error':
-          showError(message.message);
-          break;
-        default:
-          console.log('Unknown message type:', message.type);
-          showStatus(`Unknown message type: ${message.type}`);
-      }
-    };
-
-    // Button event listeners
-    extractButton.addEventListener('click', () => {
-      console.log('Extract button clicked');
-      showStatus('Extract button clicked');
-      if (!currentSelection) {
-        showError('No valid frame selected.');
-        return;
-      }
-      showSpinner(true);
-      showStatus('Extracting data...');
-      resetUI();
-      parent.postMessage({ pluginMessage: { type: 'extract-frame' } }, '*');
-    });
-
-    cancelButton.addEventListener('click', () => {
-      showStatus('Cancel button clicked');
-      parent.postMessage({ pluginMessage: { type: 'close' } }, '*');
-    });
-    
-    // Show initial status
-    showStatus('UI initialized and ready');
-    console.log('UI setup complete');
   } catch (err: any) {
-    console.error('Error in UI setup:', err);
-    // Try to show error even if setup failed
-    try {
-      const errorElement = document.getElementById('error');
-      if (errorElement) {
-        errorElement.textContent = `⚠️ UI Error: ${err.message || String(err)}`;
-        errorElement.style.color = '#D92B2B';
-      }
-    } catch (e) {
-      // At this point we can't do much else
-      console.error('Critical UI error:', e);
-    }
+    console.error('Error in setupUI:', err);
   }
 }
 
